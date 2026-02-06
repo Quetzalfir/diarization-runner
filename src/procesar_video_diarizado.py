@@ -44,7 +44,7 @@ def run_cmd(cmd: List[str]) -> None:
         print(p.stdout)
 
     if p.returncode != 0:
-        die(f"ERROR: comando falló con exit code {p.returncode}\nComando: {' '.join(safe_cmd)}")
+        die(f"ERROR: command failed with exit code {p.returncode}\nCommand: {' '.join(safe_cmd)}")
 
 
 def check_ffmpeg() -> None:
@@ -52,10 +52,10 @@ def check_ffmpeg() -> None:
         subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     except FileNotFoundError:
         die(
-            "ERROR: No encuentro ffmpeg en PATH.\n"
-            "Instálalo con:\n"
+            "ERROR: Couldn't find ffmpeg in PATH.\n"
+            "Install it with:\n"
             "  winget install -e --id Gyan.FFmpeg\n"
-            "Luego abre una nueva terminal y vuelve a intentar."
+            "Then open a new terminal and try again."
         )
     except subprocess.CalledProcessError:
         pass
@@ -73,7 +73,7 @@ def sec_to_ts(seconds: float) -> str:
 
 
 def extract_audio_to_wav(video_path: Path, wav_path: Path) -> None:
-    # WAV 16kHz mono (ideal para ASR/diarización)
+    # WAV 16kHz mono (ideal for ASR/diarization)
     cmd = [
         "ffmpeg", "-y",
         "-i", str(video_path),
@@ -93,7 +93,7 @@ def find_output_files(work_dir: Path, base_name: str) -> Tuple[Optional[Path], O
     json_path = json_candidate if json_candidate.exists() else None
     srt_path = srt_candidate if srt_candidate.exists() else None
 
-    # Fallback: si por algún motivo el nombre no coincide, toma el más reciente
+    # Fallback: if the name doesn't match for some reason, take the most recent
     if json_path is None:
         json_files = list(work_dir.glob("*.json"))
         if json_files:
@@ -154,14 +154,14 @@ def merge_segments(segments: List[Dict[str, Any]], merge_gap: float) -> List[Dic
 
 def parse_srt_time_to_seconds(t: str) -> float:
     # "HH:MM:SS,mmm" -> seconds
-    # ej "00:01:02,345"
+    # e.g. "00:01:02,345"
     hh, mm, rest = t.split(":")
     ss, mmm = rest.split(",")
     return int(hh) * 3600 + int(mm) * 60 + int(ss) + int(mmm) / 1000.0
 
 
 def parse_srt(srt_path: Path) -> List[Dict[str, Any]]:
-    # Parser simple para SRT
+    # Simple SRT parser
     text = srt_path.read_text(encoding="utf-8", errors="ignore")
     blocks = [b.strip() for b in text.split("\n\n") if b.strip()]
     out: List[Dict[str, Any]] = []
@@ -182,7 +182,7 @@ def parse_srt(srt_path: Path) -> List[Dict[str, Any]]:
 
         body = " ".join(lines[2:]).strip()
 
-        # WhisperX suele poner "SPEAKER_00: texto"
+        # WhisperX usually puts "SPEAKER_00: text"
         speaker = "SPEAKER_UNKNOWN"
         txt = body
         if ":" in body:
@@ -199,22 +199,22 @@ def run_whisperx(wav_path: Path, work_dir: Path, args: argparse.Namespace) -> No
     token = os.environ.get("HUGGINGFACE_HUB_TOKEN")
     if not token:
         die(
-            "ERROR: No encontré HUGGINGFACE_HUB_TOKEN.\n"
-            "En PowerShell setéalo así:\n"
+            "ERROR: Couldn't find HUGGINGFACE_HUB_TOKEN.\n"
+            "In PowerShell set it like this:\n"
             "  $env:HUGGINGFACE_HUB_TOKEN=\"hf_...\"\n"
-            "Además debes aceptar términos en:\n"
+            "You also must accept terms for:\n"
             "  pyannote/segmentation-3.0\n"
             "  pyannote/speaker-diarization-3.1"
         )
 
-    # Bootstrap: fuerza torch.load(weights_only=False) para evitar el bloqueo de PyTorch 2.6+
+    # Bootstrap: force torch.load(weights_only=False) to avoid PyTorch 2.6+ blocking
     bootstrap = """
 import torch
 
 _real_load = torch.load
 
 def _patched_load(*args, **kwargs):
-    # Fuerza compatibilidad con checkpoints viejos (pyannote/omegaconf)
+    # Force compatibility with older checkpoints (pyannote/omegaconf)
     kwargs["weights_only"] = False
     return _real_load(*args, **kwargs)
 
@@ -252,15 +252,15 @@ def write_diarized_txt(
         meta: Dict[str, Any],
 ) -> None:
     lines: List[str] = []
-    lines.append(f"Archivo: {video_rel.as_posix()}")
-    lines.append(f"Generado: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"File: {video_rel.as_posix()}")
+    lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append(
         f"WhisperX: model={meta['model']} language={meta['language']} "
         f"device={meta['device']} compute_type={meta['compute_type']} "
         f"diarize={meta['diarize']} min_speakers={meta['min_speakers']} max_speakers={meta['max_speakers']}"
     )
     lines.append("")
-    lines.append("TRANSCRIPCIÓN")
+    lines.append("TRANSCRIPT")
     lines.append("")
 
     for s in segments:
@@ -288,7 +288,7 @@ def process_one(video_path: Path, input_root: Path, output_root: Path, args: arg
     rel = video_path.relative_to(input_root)
     out_txt = (output_root / rel).with_suffix(".txt")
 
-    # Carpeta temporal por archivo (dentro de procesed/_tmp/...)
+    # Temp folder per file (inside procesed/_tmp/...)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     work_dir = output_root / "_tmp" / rel.parent / f"{rel.stem}_{stamp}"
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -308,12 +308,12 @@ def process_one(video_path: Path, input_root: Path, output_root: Path, args: arg
             if raw_segments:
                 segments = merge_segments(raw_segments, merge_gap=args.merge_gap)
 
-        # Fallback a SRT si JSON no trae segmentos útiles
+        # Fallback to SRT if JSON doesn't have usable segments
         if not segments and srt_path and srt_path.exists():
             segments = merge_segments(parse_srt(srt_path), merge_gap=args.merge_gap)
 
         if not segments:
-            return False, f"{rel.as_posix()} -> ERROR: no pude obtener segmentos (JSON/SRT)."
+            return False, f"{rel.as_posix()} -> ERROR: could not get segments (JSON/SRT)."
 
         meta = {
             "model": args.model,
@@ -332,14 +332,14 @@ def process_one(video_path: Path, input_root: Path, output_root: Path, args: arg
 
     finally:
         if args.keep_temp:
-            print(f"Temporales conservados en: {work_dir}")
+            print(f"Temp files kept at: {work_dir}")
         else:
             shutil.rmtree(work_dir, ignore_errors=True)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Procesa TODOS los videos dentro de ./videos y guarda .txt diarizado en ./procesed"
+        description="Processes ALL videos inside ./videos and saves diarized .txt files in ./procesed"
     )
     parser.add_argument("--language", default="es")
     parser.add_argument("--model", default="large-v2")
@@ -350,9 +350,9 @@ def main() -> None:
     parser.add_argument("--merge_gap", type=float, default=0.8)
     parser.add_argument("--keep_temp", action="store_true")
 
-    # Por default diariza (como lo pediste).
-    # Si algún día quieres solo transcribir sin token: --no_diarize
-    parser.add_argument("--no_diarize", action="store_true", help="Desactiva diarización (solo transcribe)")
+    # Diarize by default (as requested).
+    # If you ever want transcription only without a token: --no_diarize
+    parser.add_argument("--no_diarize", action="store_true", help="Disable diarization (transcribe only)")
     args = parser.parse_args()
     args.diarize = not args.no_diarize
 
@@ -363,24 +363,24 @@ def main() -> None:
     output_root = project_root / "procesed"
 
     if not input_root.exists() or not input_root.is_dir():
-        die(f"ERROR: No existe la carpeta: {input_root}\nCrea 'videos' en el mismo proyecto y mete ahí tus videos.")
+        die(f"ERROR: Folder does not exist: {input_root}\nCreate 'videos' in the project and put your videos there.")
 
     output_root.mkdir(parents=True, exist_ok=True)
 
     media_files = iter_media_files(input_root)
     if not media_files:
-        die(f"No encontré videos/audios en: {input_root}\nExtensiones soportadas: {sorted(MEDIA_EXTS)}")
+        die(f"Couldn't find videos/audio in: {input_root}\nSupported extensions: {sorted(MEDIA_EXTS)}")
 
-    print(f"Proyecto:   {project_root}")
-    print(f"Entrada:   {input_root}")
-    print(f"Salida:    {output_root}")
-    print(f"Archivos:  {len(media_files)}")
+    print(f"Project:   {project_root}")
+    print(f"Input:     {input_root}")
+    print(f"Output:    {output_root}")
+    print(f"Files:     {len(media_files)}")
     print("")
 
     ok = 0
     fail = 0
     for f in media_files:
-        print(f"\n=== Procesando: {f.relative_to(input_root).as_posix()} ===")
+        print(f"\n=== Processing: {f.relative_to(input_root).as_posix()} ===")
         success, msg = process_one(f, input_root, output_root, args)
         print(msg)
         if success:
@@ -388,10 +388,10 @@ def main() -> None:
         else:
             fail += 1
 
-    print("\n==== RESUMEN ====")
+    print("\n==== SUMMARY ====")
     print(f"OK:   {ok}")
     print(f"FAIL: {fail}")
-    print(f"Salida: {output_root}")
+    print(f"Output: {output_root}")
 
 
 if __name__ == "__main__":

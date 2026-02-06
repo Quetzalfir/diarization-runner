@@ -1,1 +1,2 @@
 whisperx==3.7.6
+transformers<5
